@@ -3,8 +3,8 @@
     <!-- ▸ Header -->
     <header class="header">
       <div class="brand">
-        <span class="shop-title">Ben & Jerry's</span>
         <img :src="logo" alt="Ben & Jerry’s logo" class="logo" />
+        <span class="shop-title">Peace, Love & Ice Cream</span>
       </div>
 
       <nav class="nav">
