@@ -27,7 +27,7 @@
       <section class="customizer">
         <h2>Stel je ijsje samen</h2>
 
-        <!-- topping = paarse laag (purpleLight) -->
+        <!-- IJslaag (paarse laag) -->
         <div class="form-group">
           <span>Ijsjes Smaak</span>
           <select v-model="toppingFlavor">
@@ -37,7 +37,7 @@
           </select>
         </div>
 
-        <!-- ijs = bruine laag (brownDark) -->
+        <!-- Topping (bruine laag) -->
         <div class="form-group">
           <span>Topping Smaak</span>
           <select v-model="iceFlavor">
@@ -47,15 +47,17 @@
           </select>
         </div>
 
-        <!-- Gegevens klant -->
+        <!-- Klantgegevens -->
         <div class="form-group">
           <span>Naam</span>
           <input v-model="customer.name" placeholder="Voornaam Achternaam" />
+          <small v-if="errors.name" class="error">{{ errors.name }}</small>
         </div>
 
         <div class="form-group">
           <span>Adres</span>
           <input v-model="customer.address" placeholder="Straat 12, Stad" />
+          <small v-if="errors.address" class="error">{{ errors.address }}</small>
         </div>
 
         <!-- Totaal -->
@@ -85,6 +87,7 @@
 import '@google/model-viewer';
 import { ref, computed, onMounted, watch } from 'vue';
 import logo from '@/assets/ben-and-jerrys-logo.svg';
+import { createOrder } from '@/api';
 
 /* — opties — */
 const flavorOptions = [
@@ -93,9 +96,9 @@ const flavorOptions = [
   { value: 'chocolate',  label: 'Chocolade', price: 1.3 },
 ];
 
-/* — geselecteerd — */
-const toppingFlavor = ref('vanilla');   // purpleLight
-const iceFlavor     = ref('chocolate'); // brownDark
+/* — smaken — */
+const toppingFlavor = ref('vanilla');     // paarse laag (purpleLight)
+const iceFlavor     = ref('chocolate');   // bruine laag (brownDark)
 
 /* — prijs — */
 const total = computed(() =>
@@ -105,19 +108,36 @@ const total = computed(() =>
   ),
 );
 
-/* — klant & pop-up — */
-const customer  = ref({ name: '', address: '' });
+/* — klant & validatie — */
+const customer = ref({ name: '', address: '' });
+const errors   = ref({ name: '', address: '' });
+
+/* — pop-up — */
 const showPopup = ref(false);
-function placeOrder() {
-  if (!customer.value.name || !customer.value.address) {
-    alert('Gelieve naam en adres in te vullen.');
-    return;
+async function placeOrder() {
+  errors.value = { name: '', address: '' };
+  if (!customer.value.name)    errors.value.name    = 'Naam is verplicht';
+  if (!customer.value.address) errors.value.address = 'Adres is verplicht';
+  if (errors.value.name || errors.value.address) return;
+
+  const payload = {
+    customerName:  customer.value.name,
+    customerAddr:  customer.value.address,
+    toppingFlavor: toppingFlavor.value,
+    iceFlavor:     iceFlavor.value,
+    total:         total.value,
+  };
+
+  try {
+    await createOrder(payload);          // ← call Render-API
+    showPopup.value = true;              // success-popup
+  } catch (err) {
+    console.error(err);
+    errors.value.general = 'Server fout, probeer later opnieuw.';
   }
-  console.table({ ...customer.value, toppingFlavor: toppingFlavor.value, iceFlavor: iceFlavor.value, total: total.value });
-  showPopup.value = true;
 }
 
-/* — model-viewer materiaal-update — */
+/* — model-viewer kleuren — */
 const viewerRef = ref(null);
 const flavorColors = {
   vanilla:    [1.0, 1.0, 1.0, 1],   // wit
@@ -132,20 +152,22 @@ function updatePopsicleColors() {
   const purpleMat = mv.model.materials.find(m => m.name === 'purpleLight');
   const brownMat  = mv.model.materials.find(m => m.name === 'brownDark');
 
-  purpleMat?.pbrMetallicRoughness.setBaseColorFactor(flavorColors[toppingFlavor.value]);
-  brownMat?.pbrMetallicRoughness.setBaseColorFactor(flavorColors[iceFlavor.value]);
+  purpleMat?.pbrMetallicRoughness.setBaseColorFactor(
+    flavorColors[toppingFlavor.value],
+  );
+  brownMat?.pbrMetallicRoughness.setBaseColorFactor(
+    flavorColors[iceFlavor.value],
+  );
 }
 
 onMounted(() => {
   viewerRef.value.addEventListener('load', updatePopsicleColors);
 });
-
-/* direct updaten bij elke wijziging */
 watch([toppingFlavor, iceFlavor], updatePopsicleColors, { immediate: true });
 </script>
 
 <style scoped>
-/* – layout & stijl (ongewijzigd) – */
+/* — layout & stijl — (grotendeels ongewijzigd) */
 .page     { min-height: 100vh; display: flex; flex-direction: column; font-family: Arial, Helvetica, sans-serif; background: #f7f7f7; }
 .header   { background: #FAB20B; color: #fff; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; }
 .brand    { display: flex; align-items: center; gap: .5rem; }
@@ -155,17 +177,19 @@ watch([toppingFlavor, iceFlavor], updatePopsicleColors, { immediate: true });
 .nav a.active, .nav a:hover { text-decoration: underline; }
 
 .main       { flex: 1; display: flex; flex-wrap: wrap; gap: 2rem; padding: 2rem; align-items: flex-start; justify-content: center; }
-.viewer     { width: 500px; height: 500px; border-radius: 1rem; box-shadow: 0 4px 20px rgba(0,0,0,.15); background: #fff; }
+.viewer     { width: 550px; height: 550px; border-radius: 1rem; box-shadow: 0 4px 20px rgba(0,0,0,.15); background: #fff; }
 .customizer { width: 320px; background: #fff; border-radius: 1.5rem; padding: 2rem; box-shadow: 0 4px 20px rgba(0,0,0,.1); }
 .customizer h2 { margin-bottom: 1.25rem; font-size: 1.5rem; }
 
-.form-group { margin-bottom: 1rem; display: flex; flex-direction: column; gap: .35rem; }
+.form-group { margin-bottom: 1rem; display: flex; flex-direction: column; gap: .4rem; }
 .form-group select,
 .form-group input { padding: .6rem .8rem; border: 1px solid #d6d6d6; border-radius: .6rem; font-size: 1rem; }
 
+.error { color: #d33434; font-size: .85rem; }
+
 .total    { display: flex; justify-content: space-between; font-weight: 700; font-size: 1.2rem; margin: 1rem 0; }
 
-.btn      { width: 100%; padding: .9rem 1rem; background: #FAB20B; color: #fff; border: none; border-radius: .7rem; font-size: 1.05rem; font-weight: 600; cursor: pointer; text-align: center; }
+.btn      { width: 100%; padding: .9rem 1rem; background: #FAB20B; color: #fff; border: none; border-radius: .7rem; font-size: 1.05rem; font-weight: 600; cursor: pointer; }
 .btn:hover { background: #d0960f; }
 
 .overlay  { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; justify-content: center; align-items: center; z-index: 1000; }
