@@ -1,5 +1,5 @@
 /* src/api.js ------------------------------------------------------- */
-const BASE = import.meta.env.VITE_API_URL + '/api';
+const BASE= import.meta.env.VITE_API_URL + '/api';
 
 export async function createOrder(data) {
   const res = await fetch(`${BASE}/orders`, {
