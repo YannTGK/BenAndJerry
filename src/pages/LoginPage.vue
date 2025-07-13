@@ -1,6 +1,6 @@
 <script setup>
-import { ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, onMounted } from 'vue';     
+import { useRouter }      from 'vue-router';
 import logo from '@/assets/ben-and-jerrys-logo.svg';
 
 const router   = useRouter();
@@ -8,8 +8,16 @@ const email    = ref('');
 const password = ref('');
 const errorMsg = ref('');
 
-const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:5001';
-const LOGIN_URL = `${BASE}/api/auth/login`;
+const BASE       = import.meta.env.VITE_API_URL ?? 'http://localhost:5001';
+const LOGIN_URL  = `${BASE}/api/auth/login`;
+const TOKEN_KEY  = 'token';
+
+/* ▸ automatische redirect bij “actieve” token ---------------------- */
+onMounted(() => {
+  if (localStorage.getItem(TOKEN_KEY)) {
+    router.replace('/admin');
+  }
+});
 
 async function login() {
   errorMsg.value = '';
@@ -26,12 +34,10 @@ async function login() {
       body: JSON.stringify({ email: email.value, password: password.value }),
     });
 
-    if (!res.ok) {
-      throw new Error('Onjuiste login');
-    }
+    if (!res.ok) throw new Error(await res.text());
 
     const { token } = await res.json();
-    localStorage.setItem('token', token);
+    localStorage.setItem(TOKEN_KEY, token);
     router.push('/admin');
   } catch (err) {
     console.error(err);
