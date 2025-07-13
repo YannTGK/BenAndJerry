@@ -1,6 +1,7 @@
+<!-- src/views/AdminOrders.vue -->
 <template>
   <div class="page">
-    <!-- ▸ Header ------------------------------------------------------ -->
+    <!-- ▸ Header -->
     <header class="header">
       <div class="brand">
         <img :src="logo" class="logo" alt="logo" />
@@ -9,28 +10,37 @@
 
       <nav class="nav">
         <RouterLink to="/">Home</RouterLink>
-        <RouterLink to="/login">Logout</RouterLink>
+        <a @click.prevent="logout">Logout</a>
       </nav>
     </header>
 
-    <!-- ▸ Main -------------------------------------------------------- -->
+    <!-- ▸ Main -->
     <main class="main">
       <section class="admin-card">
         <h2>Bestellingen</h2>
 
-        <table class="order-table">
+        <p v-if="busy">Laden…</p>
+        <p v-if="error" class="error">{{ error }}</p>
+
+        <table v-if="!busy" class="order-table">
           <thead>
             <tr>
               <th>Klant</th>
+              <th>Ijs-smaak</th>
+              <th>Topping</th>
               <th>Prijs</th>
               <th>Status</th>
               <th></th>
             </tr>
           </thead>
+
           <tbody>
             <tr v-for="o in orders" :key="o._id">
-              <td @click="select(o)" class="clickable">{{ o.name }}</td>
-              <td>€{{ o.price.toFixed(2) }}</td>
+              <td @click="select(o)" class="clickable">{{ o.customerName }}</td>
+              <td>{{ o.iceFlavor }}</td>
+              <td>{{ o.toppingFlavor }}</td>
+              <td>€{{ o.total.toFixed(2) }}</td>
+
               <td>
                 <select v-model="o.status" @change="updateStatus(o)">
                   <option>te verwerken</option>
@@ -38,35 +48,32 @@
                   <option>geannuleerd</option>
                 </select>
               </td>
+
               <td>
                 <button class="del-btn" @click="remove(o._id)">🗑</button>
               </td>
             </tr>
 
-            <tr v-if="!orders.length">
-              <td colspan="4" class="empty">Geen bestellingen</td>
+            <tr v-if="!orders.length && !busy">
+              <td colspan="6" class="empty">Geen bestellingen</td>
             </tr>
           </tbody>
         </table>
       </section>
     </main>
 
-    <!-- ▸ Detail-slideover ------------------------------------------- -->
+    <!-- ▸ Detail-slideover -->
     <div v-if="detail" class="overlay" @click.self="detail = null">
       <aside class="slideover">
         <h3>Order #{{ detail._id }}</h3>
 
-        <p><strong>Klant:</strong> {{ detail.name }}</p>
-        <p><strong>Adres:</strong> {{ detail.address }}</p>
-        <p><strong>Totaal:</strong> €{{ detail.price.toFixed(2) }}</p>
+        <p><strong>Klant:</strong> {{ detail.customerName }}</p>
+        <p><strong>Adres:</strong> {{ detail.customerAddr }}</p>
+        <p><strong>Totaal:</strong> €{{ detail.total.toFixed(2) }}</p>
         <p><strong>Status:</strong> {{ detail.status }}</p>
 
-        <div class="flavor-list">
-          <p><strong>Smaken:</strong></p>
-          <ul>
-            <li v-for="(f, i) in detail.flavors" :key="i">{{ f }}</li>
-          </ul>
-        </div>
+        <p><strong>Ijs-smaak:</strong> {{ detail.iceFlavor }}</p>
+        <p><strong>Topping:</strong>   {{ detail.toppingFlavor }}</p>
 
         <button class="btn" @click="detail = null">Sluit</button>
       </aside>
@@ -75,47 +82,82 @@
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue';
+import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import logo from '@/assets/ben-and-jerrys-logo.svg';
 
-/* ─ Dummy data (vervang later door fetch('/orders')) ─ */
-const orders = reactive([
-  {
-    _id: '1',
-    name: 'Alice',
-    address: 'Kerkstraat 10, Antwerpen',
-    flavors: ['vanilla', 'chocolate', 'strawberry'],
-    price: 7.5,
-    status: 'te verwerken',
-  },
-  {
-    _id: '2',
-    name: 'Bob',
-    address: 'Stationslaan 5, Gent',
-    flavors: ['chocolate', 'chocolate', 'vanilla'],
-    price: 9.0,
-    status: 'verzonden',
-  },
-]);
+/* ─ config ─ */
+const BASE   = import.meta.env.VITE_API_URL ?? 'http://localhost:5001';
+const router = useRouter();
+const token  = localStorage.getItem('token');
+if (!token) router.replace('/login');
 
+/* ─ state ─ */
+const orders = ref([]);
 const detail = ref(null);
+const busy   = ref(false);
+const error  = ref('');
 
-function select(o) {
-  detail.value = { ...o };
+/* ─ helpers ─ */
+const authHeaders = () => ({
+  Authorization: `Bearer ${token}`,
+  'Content-Type': 'application/json',
+});
+
+/* ─ API calls ─ */
+async function loadOrders() {
+  try {
+    busy.value = true;
+    const res  = await fetch(`${BASE}/api/orders`, { headers: authHeaders() });
+    if (!res.ok) throw new Error(await res.text());
+    orders.value = await res.json();
+  } catch (e) {
+    console.error(e);
+    error.value = 'Laden mislukt.';
+  } finally {
+    busy.value = false;
+  }
 }
 
-function remove(id) {
-  const idx = orders.findIndex(o => o._id === id);
-  if (idx !== -1) orders.splice(idx, 1);
+async function updateStatus(o) {
+  try {
+    await fetch(`${BASE}/api/orders/${o._id}`, {
+      method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify({ status: o.status }),
+    });
+  } catch (e) {
+    console.error(e);
+    error.value = 'Status niet opgeslagen.';
+  }
 }
 
-function updateStatus(order) {
-  /* TODO: PATCH /orders/:id  */
+async function remove(id) {
+  if (!confirm('Verwijderen?')) return;
+  try {
+    await fetch(`${BASE}/api/orders/${id}`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+    });
+    orders.value = orders.value.filter(o => o._id !== id);
+    if (detail.value?._id === id) detail.value = null;
+  } catch (e) {
+    console.error(e);
+    error.value = 'Verwijderen mislukt.';
+  }
 }
+
+/* ─ UI ─ */
+const select = (o) => { detail.value = { ...o }; };
+const logout = ()  => { localStorage.removeItem('token'); router.replace('/login'); };
+
+/* ─ init ─ */
+onMounted(loadOrders);
 </script>
 
+
 <style scoped>
-/* — basislayout ------------------------------------------------------- */
+/* basislayout ------------------------------------------------------- */
 .page   { min-height:100vh; display:flex; flex-direction:column; font-family:Arial,Helvetica,sans-serif; background:#f7f7f7; }
 .header { background:#FAB20B; color:#fff; padding:1rem 2rem; display:flex; justify-content:space-between; align-items:center; }
 .brand  { display:flex; align-items:center; gap:.5rem; }
@@ -124,12 +166,12 @@ function updateStatus(order) {
 .nav a { margin-left:1.25rem; color:#fff; text-decoration:none; font-weight:500; }
 .nav a:hover { text-decoration:underline; }
 
-/* — main & card ------------------------------------------------------- */
+/* main & card ------------------------------------------------------- */
 .main { flex:1; display:flex; justify-content:center; padding:2rem; }
 .admin-card { width:760px; background:#fff; border-radius:1.5rem; padding:2rem 2.25rem; box-shadow:0 4px 20px rgba(0,0,0,.1); }
 .admin-card h2 { font-size:1.6rem; margin-bottom:1.25rem; }
 
-/* — table ------------------------------------------------------------- */
+/* table ------------------------------------------------------------- */
 .order-table { width:100%; border-collapse:collapse; }
 .order-table th, .order-table td { padding:.75rem; border-bottom:1px solid #e3e3e3; text-align:left; }
 .order-table th { background:#fafafa; font-weight:600; }
@@ -138,17 +180,18 @@ function updateStatus(order) {
 .clickable:hover { text-decoration:underline; }
 .del-btn { background:none; border:none; cursor:pointer; font-size:1.1rem; }
 .empty { text-align:center; padding:2rem 0; color:#777; }
+.error { color:#d33434; margin:.5rem 0; }
 
-/* — buttons ----------------------------------------------------------- */
+/* buttons ----------------------------------------------------------- */
 .btn { margin-top:1.5rem; width:100%; padding:.9rem 1rem; background:#FAB20B; color:#fff; border:none; border-radius:.7rem; font-size:1.05rem; font-weight:600; cursor:pointer; }
 .btn:hover { background:#d0960f; }
 
-/* — slideover --------------------------------------------------------- */
+/* slideover --------------------------------------------------------- */
 .overlay { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; justify-content:flex-end; }
 .slideover { width:300px; max-width:100%; height:100%; background:#fff; padding:2rem; box-shadow:-4px 0 20px rgba(0,0,0,.2); display:flex; flex-direction:column; gap:.8rem; }
 .slideover h3 { font-size:1.4rem; margin-bottom:.5rem; }
 
-/* — smaken lijst ------------------------------------------------------ */
+/* smaken lijst ------------------------------------------------------ */
 .flavor-list { margin:.5rem 0 1rem; }
 .flavor-list ul { margin-left:1rem; }
 </style>
