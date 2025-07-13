@@ -1,3 +1,45 @@
+<script setup>
+import { ref } from 'vue';
+import { useRouter } from 'vue-router';
+import logo from '@/assets/ben-and-jerrys-logo.svg';
+
+const router   = useRouter();
+const email    = ref('');
+const password = ref('');
+const errorMsg = ref('');
+
+const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:5001';
+const LOGIN_URL = `${BASE}/api/auth/login`;
+
+async function login() {
+  errorMsg.value = '';
+
+  if (!email.value || !password.value) {
+    errorMsg.value = 'E-mail en wachtwoord verplicht';
+    return;
+  }
+
+  try {
+    const res = await fetch(LOGIN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email.value, password: password.value }),
+    });
+
+    if (!res.ok) {
+      throw new Error('Onjuiste login');
+    }
+
+    const { token } = await res.json();
+    localStorage.setItem('token', token);
+    router.push('/admin');
+  } catch (err) {
+    console.error(err);
+    errorMsg.value = 'Login mislukt – controleer gegevens';
+  }
+}
+</script>
+
 <template>
   <div class="page">
     <!-- ▸ Header -->
@@ -19,12 +61,7 @@
         <h2>Admin login</h2>
 
         <form @submit.prevent="login">
-          <input
-            v-model="email"
-            type="email"
-            placeholder="E-mail"
-            required
-          />
+          <input v-model="email" type="email" placeholder="E-mail" required />
           <input
             v-model="password"
             type="password"
@@ -34,30 +71,11 @@
           <button class="btn">Log in</button>
         </form>
 
-        <p class="hint">Demo-login accepteert elk wachtwoord.</p>
+        <p v-if="errorMsg" class="error">{{ errorMsg }}</p>
       </section>
     </main>
   </div>
 </template>
-
-<script setup>
-import { ref } from 'vue';
-import { useRouter } from 'vue-router';
-import logo from '@/assets/ben-and-jerrys-logo.svg';
-
-const router = useRouter();
-const email = ref('');
-const password = ref('');
-
-function login() {
-  if (email.value && password.value) {
-    localStorage.setItem('token', 'dev-token');
-    router.push('/admin');
-  } else {
-    alert('Gelieve e-mail en wachtwoord in te vullen.');
-  }
-}
-</script>
 
 <style scoped>
 /* – basislayout ------------------------------------------------------- */
